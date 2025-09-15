@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 import moment from 'moment';
+import jsPDF from 'jspdf';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -1041,24 +1042,89 @@ function SupplierDetails({ suppliers, addReceived, addPayment, setSuppliers, cur
   });
 
   const handleDownload = () => {
-    const csvContent = "data:text/csv;charset=utf-8," +
-      "Date,Received,Paid,Method\n" +
-      filteredTransactions.map(t => {
-        const date = moment(t.date).format('MMM D, YYYY');
-        if (t.type === 'received') {
-          return `${date},RS${t.amount.toFixed(2)},,`;
-        } else {
-          return `${date},,RS${t.amount.toFixed(2)},${t.method}`;
-        }
-      }).join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `${sup.name}_transactions.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Create new PDF document
+    const pdf = new jsPDF();
+    
+    // Set font
+    pdf.setFont('helvetica');
+    
+    // Title
+    pdf.setFontSize(20);
+    pdf.text(`${sup.name} - Transaction Report`, 20, 20);
+    
+    // Date range
+    pdf.setFontSize(12);
+    const dateRange = fromDate && toDate 
+      ? `Date Range: ${moment(fromDate).format('MMM D, YYYY')} - ${moment(toDate).format('MMM D, YYYY')}`
+      : `All Transactions (Generated: ${moment().format('MMM D, YYYY h:mm A')})`;
+    pdf.text(dateRange, 20, 35);
+    
+    // Transactions table header
+    pdf.setFontSize(14);
+    pdf.text('Transaction Details', 20, 55);
+    
+    // Table headers
+    pdf.setFontSize(10);
+    pdf.text('Date', 20, 65);
+    pdf.text('Received', 60, 65);
+    pdf.text('Paid', 100, 65);
+    pdf.text('Method', 140, 65);
+    
+    // Draw line under headers
+    pdf.line(20, 70, 190, 70);
+    
+    // Add transactions
+    let yPosition = 80;
+    filteredTransactions.forEach((t, index) => {
+      // Check if we need a new page
+      if (yPosition > 270) {
+        pdf.addPage();
+        yPosition = 20;
+        
+        // Add headers on new page
+        pdf.setFontSize(10);
+        pdf.text('Date', 20, yPosition);
+        pdf.text('Received', 60, yPosition);
+        pdf.text('Paid', 100, yPosition);
+        pdf.text('Method', 140, yPosition);
+        pdf.line(20, yPosition + 5, 190, yPosition + 5);
+        yPosition = 30;
+      }
+      
+      const date = moment(t.date).format('MMM D, YYYY');
+      pdf.text(date, 20, yPosition);
+      
+      if (t.type === 'received') {
+        pdf.text(`RS ${t.amount.toFixed(2)}`, 60, yPosition);
+        pdf.text('-', 100, yPosition);
+        pdf.text('-', 140, yPosition);
+      } else {
+        pdf.text('-', 60, yPosition);
+        pdf.text(`RS ${t.amount.toFixed(2)}`, 100, yPosition);
+        pdf.text(t.method.charAt(0).toUpperCase() + t.method.slice(1), 140, yPosition);
+      }
+      
+      yPosition += 10;
+    });
+    
+    // Add footer with totals
+    yPosition += 10;
+    pdf.setFontSize(12);
+    pdf.text('Final Summary:', 20, yPosition);
+    yPosition += 10;
+    
+    pdf.setFontSize(10);
+    pdf.text(`Total Received: RS ${totalReceived.toFixed(2)}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Total Paid: RS ${totalPaid.toFixed(2)}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Pending Amount to Pay: RS ${pendingPay}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Amount They Owe Us: RS ${pendingReceive}`, 20, yPosition);
+    
+    // Save the PDF
+    const fileName = `${sup.name}_transaction_report_${moment().format('YYYY-MM-DD')}.pdf`;
+    pdf.save(fileName);
   };
 
   return (
@@ -1229,7 +1295,7 @@ function SupplierDetails({ suppliers, addReceived, addPayment, setSuppliers, cur
                 className="input mt-1 rounded-md"
               />
             </div>
-            <button onClick={handleDownload} className="btn-primary px-6 py-2 rounded-md mt-auto">Download Report</button>
+            <button onClick={handleDownload} className="btn-primary px-6 py-2 rounded-md mt-auto">Download PDF Report</button>
           </div>
           <div className="overflow-auto max-h-[400px]">
             <table className="table w-full">
